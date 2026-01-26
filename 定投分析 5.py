@@ -29,7 +29,7 @@ income=[]
 tlist=[]
 
 # 投资参数
-v=300  # 每月投入金额数
+v=100  # 每月投入金额数
 
 amount=0
 last_cost=0
@@ -95,9 +95,9 @@ else:
         raise RuntimeError("CSV must contain a numeric price column (e.g. 'close')")
     signal = df[numeric_cols[0]].astype(float).values
 
-# '“倒霉蛋”测试：高位进场会发生什么？'
-# # 从最大值位置开始切片
-signal = signal[signal.argmax():]
+# # '“倒霉蛋”测试：高位进场会发生什么？'
+# # # 从最大值位置开始切片
+# signal = signal[signal.argmax():]
 
 # 数据段截取
 # 以样本点数量重建时间轴（单位：天），采样率仍假定为 1/day
