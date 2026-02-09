@@ -14,7 +14,8 @@ income=[]
 tlist=[]
 
 # 投资参数
-v=300  # 每月投入金额数
+v1=300*18  # 每月投入金额数
+v2=300
 avg_line_window_size = 60  # 5, 10, 20, 60 参考自支付宝客服AI
 
 amount=0
@@ -81,9 +82,9 @@ else:
         raise RuntimeError("CSV must contain a numeric price column (e.g. 'close')")
     signal = df[numeric_cols[0]].astype(float).values
 
-# # '“倒霉蛋”测试：高位进场会发生什么？'
-# # # 从最大值位置开始切片
-# signal = signal[signal.argmax():]
+# '“倒霉蛋”测试：高位进场会发生什么？'
+# # 从最大值位置开始切片
+signal = signal[signal.argmax():]
 
 
 
@@ -128,21 +129,26 @@ t_list = np.arange(0, len(signal), 1)
 # 采样频率
 sampling_rate = 1
 
-# 定投仓库1 
+# 定时定投, 带止盈
 cost1 = 0
 asset1 = 0  # 资产
 share1 = 0  # 股份
 STORE1 = [(0, cost1, asset1, share1)]
-T_invest1 = 30  # 统一为30天
+T_invest1 = 30  # 统一为一周
+cost1_in_system = 0
+realized_profit1 = 0.0  # 累计已实现的净利润
+last_purchase_price1 = np.inf  # 上一次买入时候的价格
 
-# 定投仓库2
+# 跌幅买入，带止盈
 cost2 = 0
 asset2 = 0
 share2 = 0
 STORE2 = [(0, cost2, asset2, share2)]
-T_invest2 = 30  # 统一为30天
+T_invest2 = 30  # 统一为一周
 cost2_in_system = 0
 realized_profit2 = 0.0  # 累计已实现的净利润
+
+last_price = np.inf
 
 # 止盈规则
 TAKE_PROFIT_RATE = 0.50  # 累计收益率阈值（保持原值，如需改为0.20请告诉我）
@@ -158,25 +164,38 @@ for i, t in enumerate(t_list):
     avg_price = np.mean(price_window)
     AVG_PRICE.append(avg_price)
 
-    # 仓库1 30天定投一次（保持不变）
+    # 仓库1 一周判断一次，跌了4%才买
     if int(round(t) % T_invest1) == 0:
-        invest = v * T_invest1 / 30  # 本期定投金额
-        invest = invest * alipay_invest_rate(avg_price, price)
-        # 成本累计
-        cost1 += invest
-        # 股权累计
-        share1 += invest / price
-        # 资产记录
-        asset1 = share1 * price - cost1
-        STORE1.append((t, cost1, asset1, share1))
-
-    # 仓库2 30天定投一次（先买入，后止盈，修复了成本与已实现利润的更新）
-    if int(round(t) % T_invest2) == 0:
-        '''
-        豆包说支付宝先定投再止盈
-        支付宝AI说先止盈再定投
-        '''
+        # 执行止盈（基于系统内持仓的累计收益率）
+        if cost1_in_system > 0 and share1 > 0:
+            cum_return = (share1 * price - cost1_in_system) / cost1_in_system
+            if cum_return >= TAKE_PROFIT_RATE:
+                sell_shares = share1 * SELL_RATIO
+                proceeds_gross = sell_shares * price
+                cost_sold = cost1_in_system * SELL_RATIO
+                net_profit = proceeds_gross - cost_sold
+                # 更新已实现净利润与系统内持仓/成本
+                realized_profit1 += net_profit
+                share1 -= sell_shares
+                cost1_in_system -= cost_sold
         
+        # 本次定投（买入）
+        if price <= 0.96 * last_purchase_price1 or price <= last_price * 0.96:  # 这个算4% 跌幅买入吧？
+            invest = v1 * T_invest1 / 30    # 本期定投金额
+            last_purchase_price1 = price
+            # invest = invest * alipay_invest_rate(avg_price, price)  # 支付宝的智能定投和跌幅买入只能二选一
+            cost1 += invest                    # 总投入记录（可保留）
+            cost1_in_system += invest          # 记录还在系统里的成本基数（用于止盈判断）
+            share1 += invest / price
+
+
+        # 资产记录 = 系统内净值 + 已实现净利
+        asset1 = share1 * price - cost1_in_system + realized_profit1
+        STORE1.append((t, cost1_in_system/cost1, asset1/cost1, share1/cost1))
+
+    # 仓库2 一周定投一次（先买入，后止盈，修复了成本与已实现利润的更新）
+    if int(round(t) % T_invest2) == 0:
+
         # 执行止盈（基于系统内持仓的累计收益率）
         if cost2_in_system > 0 and share2 > 0:
             cum_return = (share2 * price - cost2_in_system) / cost2_in_system
@@ -191,7 +210,7 @@ for i, t in enumerate(t_list):
                 cost2_in_system -= cost_sold
         
         # 本次定投（买入）
-        invest = v * T_invest1 / 30  # 本期定投金额
+        invest = v2 * T_invest2 / 30  # 本期定投金额
         invest = invest * alipay_invest_rate(avg_price, price)
         cost2 += invest                    # 总投入记录（可保留）
         cost2_in_system += invest          # 记录还在系统里的成本基数（用于止盈判断）
@@ -200,8 +219,9 @@ for i, t in enumerate(t_list):
 
         # 资产记录 = 系统内净值 + 已实现净利
         asset2 = share2 * price - cost2_in_system + realized_profit2
-        STORE2.append((t, cost2_in_system, asset2, share2))
+        STORE2.append((t, cost2_in_system/cost2, asset2/cost2, share2/cost2))
         
+    last_price = price
 
 # 数据格式转换
 TIMES1 = np.array([s[0] for s in STORE1])
@@ -224,17 +244,17 @@ plt.grid()
 
 # assets 对比
 plt.subplot(312)
-plt.plot(TIMES1, ASSETS1, 'r', label='无止盈')
-plt.plot(TIMES2, ASSETS2, 'b', label='有止盈')
-plt.title("净资产")
+plt.plot(TIMES1, ASSETS1, 'r', label='跌4%买入')
+plt.plot(TIMES2, ASSETS2, 'b', label='常规定投')
+plt.title("净资产/累积毛成本")
 plt.legend()
 plt.grid()
 
 # share 对比
 plt.subplot(313)
-plt.plot(TIMES1, SHARE1, 'r', label='无止盈')
-plt.plot(TIMES2, SHARE2, 'b', label='有止盈')
-plt.title("持有份额")
+plt.plot(TIMES1, SHARE1, 'r', label='跌4%买入')
+plt.plot(TIMES2, SHARE2, 'b', label='常规定投')
+plt.title("持有份额/累积毛成本")
 plt.legend()
 plt.tight_layout()
 plt.grid()
