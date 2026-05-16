@@ -1,0 +1,12 @@
+{
+    "reportGeneralTypeIssues": false,
+    "reportArgumentType": false,
+    "reportAttributeAccessIssue": false,
+    "reportOptionalMemberAccess": false,
+    "reportOptionalSubscript": false,
+    "reportOptionalIterable": false,
+    "reportOptionalCall": false,
+    "reportOptionalContextManager": false,
+    "reportOptionalOperand": false,
+    "typeCheckingMode": "basic"
+}

@@ -95,29 +95,35 @@ t_list = np.arange(0, len(signal), 1)
 sampling_rate = 1
 
 # 定投仓库1 (单定投)
-cost1 = 0
-asset1 = 0  # 资产
-share1 = 0  # 股份
-STORE1 = [(0, cost1, asset1, share1)]
+cost1 = 0.0
+asset1 = 0.0  # 资产
+share1 = 0.0  # 股份
+STORE1 = [(0.0, cost1, asset1, share1)]
 T_invest1 = 30  # 统一为30天
 
 # 定投仓库2
-cost2 = 0
-asset2 = 0
-share2 = 0
-STORE2 = [(0, cost2, asset2, share2)]
+cost2 = 0.0
+asset2 = 0.0
+share2 = 0.0
+STORE2 = [(0.0, cost2, asset2, share2)]
 T_invest2 = 30  # 统一为30天
-cost2_in_system = 0
+cost2_in_system = 0.0
 realized_profit2 = 0.0  # 累计已实现的净利润
 
 # 止盈规则
 TAKE_PROFIT_RATE = 0.50  # 累计收益率阈值（保持原值，如需改为0.20请告诉我）
-SELL_RATIO = 0.2 # 卖出比例（保持原值）
+SELL_RATIO_PROFIT = 0.2 # 卖出比例（保持原值）
+# 止损规则
+STOP_LOSS_RATE = 0.2  # 止损阈值
+SELL_RATIO_LOSS = 0.1        # 卖出比例，不能超过1的
 
+current_max_day_end = 0
 for i, t in enumerate(t_list):
     # “实时”股价
     price = signal[i]
-        
+    # 累积最高日收盘价(4%止损是给场内中短线用的，几周到几个月就完了)
+    current_max_day_end = max(price, current_max_day_end)
+
     # 仓库1 30天定投一次（保持不变）
     if int(round(t) % T_invest1) == 0:
         # 成本累计
@@ -128,27 +134,50 @@ for i, t in enumerate(t_list):
         asset1 = share1 * price - cost1
         STORE1.append((t, cost1, asset1, share1))
 
-    # 每周检查一次止盈 (7天)
+    # 仓库2 30天定投一次
+    # 每次只执行一次止盈/止损
+    sold = 0
+    # 每周检查一次止盈止损 (7天)
     if int(round(t) % 7) == 0:
         # 执行止盈（基于系统内持仓的累计收益率）
         if cost2_in_system > 0 and share2 > 0:
             cum_return = (share2 * price - cost2_in_system) / cost2_in_system
             if cum_return >= TAKE_PROFIT_RATE:
-                sell_shares = share2 * SELL_RATIO
+                sold = 1
+                sell_shares = share2 * SELL_RATIO_PROFIT
                 proceeds_gross = sell_shares * price
-                cost_sold = cost2_in_system * SELL_RATIO
-                net_profit = proceeds_gross - cost_sold
+                cost_of_this_sell = cost2_in_system * SELL_RATIO_PROFIT
+                profit_of_this_sell = proceeds_gross - cost_of_this_sell
                 
                 # 更新已实现净利润与系统内持仓/成本
-                realized_profit2 += net_profit
+                realized_profit2 += profit_of_this_sell
                 share2 -= sell_shares
-                cost2_in_system -= cost_sold
+                cost2_in_system -= cost_of_this_sell
+                # print(f"Day {t}: 触发止盈, 卖出 {sell_shares:.2f} 份")
 
-        # 每周记录一次仓库2状态
+        # 执行止损（基于当前最高日收盘价）
+        if cost2_in_system > 0 and share2 > 0 and (not sold):
+            if price <= current_max_day_end * (1 - STOP_LOSS_RATE):
+                # 触发止损：卖出部分股份并持有现金
+                sell_shares = share2 * SELL_RATIO_LOSS
+                proceeds_gross = sell_shares * price
+                cost_of_this_sell = cost2_in_system * SELL_RATIO_LOSS
+                profit_of_this_sell = proceeds_gross - cost_of_this_sell
+                
+                # 更新已实现净利润与系统内持仓/成本
+                realized_profit2 += profit_of_this_sell
+                share2 -= sell_shares
+                cost2_in_system -= cost_of_this_sell
+                
+                # 重置最高价计数
+                current_max_day_end = price 
+                # print(f"Day {t}: 触发止损, 卖出 {sell_shares:.2f} 份")
+        
+        # 每周记录一次仓库2状态 (为了更准确地反映止损后的收益率)
         asset2 = share2 * price - cost2_in_system + realized_profit2
         STORE2.append((t, cost2, asset2, share2)) # cost2, cost2_in_system
 
-    # 仓库2 30天定投一次
+    # 仓库2定投
     if int(round(t) % T_invest2) == 0:
         # 本次定投（买入）
         invest = v2 * T_invest2 / 30        # 瞬时投资金额
@@ -156,7 +185,7 @@ for i, t in enumerate(t_list):
         cost2_in_system += invest          # 系统内成本基数
         share2 += invest / price
 
-        # 记录定投后的状态, 资产记录 = 系统内净值 + 已实现净利
+        # 记录定投后的状态
         asset2 = share2 * price - cost2_in_system + realized_profit2
         STORE2.append((t, cost2, asset2, share2)) # cost2, cost2_in_system
         
@@ -185,7 +214,7 @@ plt.grid()
 # 净资产 (收益额) 对比
 plt.subplot(412)
 plt.plot(TIMES1, ASSETS1, 'r', label='单定投')
-plt.plot(TIMES2, ASSETS2, 'b', label='有止盈')
+plt.plot(TIMES2, ASSETS2, 'b', label='混合止盈止损')
 plt.title("净资产 (累计收益额)")
 plt.legend()
 plt.grid()
@@ -193,7 +222,7 @@ plt.grid()
 # 净资产/成本比 (收益率) 对比
 plt.subplot(413)
 plt.plot(TIMES1, ASSETS1/(COST1+1e-8), 'r', label='单定投')
-plt.plot(TIMES2, ASSETS2/(COST2+1e-8), 'b', label='有止盈')
+plt.plot(TIMES2, ASSETS2/(COST2+1e-8), 'b', label='混合止盈止损')
 plt.title("收益率 (收益/总投入)")
 plt.legend()
 plt.grid()
@@ -201,7 +230,7 @@ plt.grid()
 # share 对比
 plt.subplot(414)
 plt.plot(TIMES1, SHARE1, 'r', label='单定投')
-plt.plot(TIMES2, SHARE2, 'b', label='有止盈')
+plt.plot(TIMES2, SHARE2, 'b', label='混合止盈止损')
 plt.title("持有份额")
 plt.legend()
 plt.grid()
