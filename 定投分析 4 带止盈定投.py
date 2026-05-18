@@ -54,36 +54,36 @@ sampling_rate = 1
 #         A3 * np.sin(2 * np.pi / T3 * t_list)
 
 '自回归噪声信号'
-signal = []
-y = mu
-for i in range(len(t_list)):
-    y = mu + phi*(y-mu) + np.random.randn()*std # 自回归噪声，均值+负反馈项+白噪声项
-    y = max(y, 1e-3)
-    mu *= (1+increase_rate)
-    signal.append(y)
-signal = np.array(signal)
+# signal = []
+# y = mu
+# for i in range(len(t_list)):
+#     y = mu + phi*(y-mu) + np.random.randn()*std # 自回归噪声，均值+负反馈项+白噪声项
+#     y = max(y, 1e-3)
+#     mu *= (1+increase_rate)
+#     signal.append(y)
+# signal = np.array(signal)
 
 '读取历史数据'
-# # 删除自回归噪声部分，改为从 CSV 读取价格序列
-# # csv_path 请根据你的项目结构替换为实际文件路径
+# 删除自回归噪声部分，改为从 CSV 读取价格序列
+# csv_path 请根据你的项目结构替换为实际文件路径
 
-# # csv_path = r"MacroTrends_Data_Download_NVDA.csv"
-# # csv_path = r"百年道琼斯指数.csv"
-# csv_path = r"01年至今A股指数.csv"
+# csv_path = r"MacroTrends_Data_Download_NVDA.csv"
+# csv_path = r"百年道琼斯指数.csv"
+csv_path = r"01年至今A股指数.csv"
 
-# df = pd.read_csv(csv_path, parse_dates=['date'], dayfirst=False)
-# # 优先使用 'close' 列，若无则使用第一个数值列
-# if 'close' in df.columns:
-#     signal = df['close'].astype(float).values
-# else:
-#     numeric_cols = df.select_dtypes(include=[float, int]).columns
-#     if len(numeric_cols) == 0:
-#         raise RuntimeError("CSV must contain a numeric price column (e.g. 'close')")
-#     signal = df[numeric_cols[0]].astype(float).values
+df = pd.read_csv(csv_path, parse_dates=['date'], dayfirst=False)
+# 优先使用 'close' 列，若无则使用第一个数值列
+if 'close' in df.columns:
+    signal = df['close'].astype(float).values
+else:
+    numeric_cols = df.select_dtypes(include=[float, int]).columns
+    if len(numeric_cols) == 0:
+        raise RuntimeError("CSV must contain a numeric price column (e.g. 'close')")
+    signal = df[numeric_cols[0]].astype(float).values
 
-# '“倒霉蛋”测试：高位进场会发生什么？'
-# # 从最大值位置开始切片
-# signal = signal[signal.argmax():]
+'“倒霉蛋”测试：高位进场会发生什么？'
+# 从最大值位置开始切片
+signal = signal[signal.argmax():]
 
 # 数据段截取
 
