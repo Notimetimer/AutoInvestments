@@ -79,59 +79,58 @@ sampling_rate = 1
 
 
 '改进版自回归噪声信号'
-# signal = []
+signal = []
 
-# # --- 重新设置平滑参数 ---
-# mu = 100.0                 # 提高初始均值基数
-# y = mu
-# phi = 0.98                 # 提高自回归系数，越接近1价格越平滑（惯性大）
-# std = 1.5                  # 缩小随机扰动的绝对振幅
-# increase_rate = (1 + 0.05) ** (1/365) - 1 
+# --- 重新设置平滑参数 ---
+mu = 100.0                 # 提高初始均值基数
+y = mu
+phi = 0.98                 # 提高自回归系数，越接近1价格越平滑（惯性大）
+std = 1.5                  # 缩小随机扰动的绝对振幅
+increase_rate = (1 + 0.05) ** (1/365) - 1 
 
-# # --- 退市设定 ---
-# delist_threshold = 20.0    # 设定退市红线（比如跌到20块直接清零）
-# is_delisted = False        # 退市状态标记
+# --- 退市设定 ---
+delist_threshold = 20.0    # 设定退市红线（比如跌到20块直接清零）
+is_delisted = False        # 退市状态标记
 
-# for i in range(len(t_list)):
-#     if is_delisted:
-#         # 一旦退市，后续所有时间点价格均为0
-#         signal.append(0.0)
-#         continue
+for i in range(len(t_list)):
+    if is_delisted:
+        # 一旦退市，后续所有时间点价格均为0
+        signal.append(0.0)
+        continue
         
-#     # 自回归噪声：均值 + 负反馈项 + 白噪声
-#     y = mu + phi * (y - mu) + np.random.randn() * std 
+    # 自回归噪声：均值 + 负反馈项 + 白噪声
+    y = mu + phi * (y - mu) + np.random.randn() * std 
     
-#     # 退市判定
-#     if y < delist_threshold:
-#         y = 0.0
-#         is_delisted = True
+    # 退市判定
+    if y < delist_threshold:
+        y = 0.0
+        is_delisted = True
     
-#     mu *= (1 + increase_rate)
-#     signal.append(y)
+    mu *= (1 + increase_rate)
+    signal.append(y)
 
-# signal = np.array(signal)
+signal = np.array(signal)
 
 '读取历史数据'
-# 删除自回归噪声部分，改为从 CSV 读取价格序列
-# csv_path 请根据你的项目结构替换为实际文件路径
+# # 删除自回归噪声部分，改为从 CSV 读取价格序列
+# # csv_path 请根据你的项目结构替换为实际文件路径
 
-# csv_path = r"MacroTrends_Data_Download_NVDA.csv"
-# csv_path = r"百年道琼斯指数.csv"
-csv_path = r"01年至今A股指数.csv"
+# # csv_path = r"MacroTrends_Data_Download_NVDA.csv"
+# # csv_path = r"百年道琼斯指数.csv"
+# csv_path = r"01年至今A股指数.csv"
 
-df = pd.read_csv(csv_path, parse_dates=['date'], dayfirst=False)
-# 优先使用 'close' 列，若无则使用第一个数值列
-if 'close' in df.columns:
-    signal = df['close'].astype(float).values
-else:
-    numeric_cols = df.select_dtypes(include=[float, int]).columns
-    if len(numeric_cols) == 0:
-        raise RuntimeError("CSV must contain a numeric price column (e.g. 'close')")
-    signal = df[numeric_cols[0]].astype(float).values
-
-# '“倒霉蛋”测试：高位进场会发生什么？'
-# # 从最大值位置开始切片
-signal = signal[signal.argmax():]
+# df = pd.read_csv(csv_path, parse_dates=['date'], dayfirst=False)
+# # 优先使用 'close' 列，若无则使用第一个数值列
+# if 'close' in df.columns:
+#     signal = df['close'].astype(float).values
+# else:
+#     numeric_cols = df.select_dtypes(include=[float, int]).columns
+#     if len(numeric_cols) == 0:
+#         raise RuntimeError("CSV must contain a numeric price column (e.g. 'close')")
+#     signal = df[numeric_cols[0]].astype(float).values
+# # '“倒霉蛋”测试：高位进场会发生什么？'
+# # # 从最大值位置开始切片
+# signal = signal[signal.argmax():]
 
 # 数据段截取
 # 以样本点数量重建时间轴（单位：天），采样率仍假定为 1/day
