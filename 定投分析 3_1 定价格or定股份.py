@@ -1,6 +1,7 @@
 import numpy as np
 from math import pi, sin, cos, tan
 import matplotlib.pyplot as plt
+import pandas as pd  # <-- 新增：用于从 CSV 读取价格序列
 # 设置字体以支持中文
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
@@ -44,24 +45,55 @@ A3 = 1
 
 # 采样周期
 sampling_rate = 1
-
+'正弦信号'
 # # 预先生成数据
 # signal = A0 + \
 #         A1 * np.sin(2 * np.pi / T1 * t_list) + \
 #         A2 * np.sin(2 * np.pi / T2 * t_list) + \
 #         A3 * np.sin(2 * np.pi / T3 * t_list)
 
-signal = []
+'自回归噪声信号'
+# signal = []
+# y = mu
+# for i in range(len(t_list)):
+#     y = mu + phi*(y-mu) + np.random.randn()*std # 自回归噪声，均值+负反馈项+白噪声项
+#     y = max(y, 1e-3)
+#     mu *= (1+increase_rate)
+#     signal.append(y)
+# signal = np.array(signal)
 
-y = mu
-for i in range(len(t_list)):
-    y = mu + phi*(y-mu) + np.random.randn()*std # 自回归噪声，均值+负反馈项+白噪声项
-    mu *= (1+increase_rate)
-    signal.append(y)
+'读取历史数据'
+# 删除自回归噪声部分，改为从 CSV 读取价格序列
+# csv_path 请根据你的项目结构替换为实际文件路径
 
-signal = np.array(signal)
+# csv_path = r"MacroTrends_Data_Download_NVDA.csv"
+# csv_path = r"百年道琼斯指数.csv"
+csv_path = r"01年至今A股指数.csv"
 
-# 定投仓库1 
+df = pd.read_csv(csv_path, parse_dates=['date'], dayfirst=False)
+# 优先使用 'close' 列，若无则使用第一个数值列
+if 'close' in df.columns:
+    signal = df['close'].astype(float).values
+else:
+    numeric_cols = df.select_dtypes(include=[float, int]).columns
+    if len(numeric_cols) == 0:
+        raise RuntimeError("CSV must contain a numeric price column (e.g. 'close')")
+    signal = df[numeric_cols[0]].astype(float).values
+
+'“倒霉蛋”测试：高位进场会发生什么？'
+# 从最大值位置开始切片
+signal = signal[signal.argmax():]
+
+# 数据段截取
+
+
+# 以样本点数量重建时间轴（单位：天），采样率仍假定为 1/day
+t_list = np.arange(0, len(signal), 1)
+
+# 采样频率
+sampling_rate = 1
+
+# 定投仓库1 (单定投)
 cost1 = 0
 asset1 = 0  # 资产
 share1 = 0  # 股份
